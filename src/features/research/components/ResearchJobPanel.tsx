@@ -18,14 +18,21 @@ export function ResearchJobPanel({
     return null
   }
 
+  const isRunning = loading || job?.status === "queued" || job?.status === "running"
+
   return (
     <section className="job-panel" aria-label="Research job status">
       <div className="job-panel-header">
         <div>
           <p>Research workflow</p>
           <strong>{selectedSuggestion?.title ?? "Starting selected research"}</strong>
+          {job ? (
+            <small>
+              {job.current_step.replaceAll("_", " ")} · {job.progress}%
+            </small>
+          ) : null}
         </div>
-        {loading ? (
+        {isRunning ? (
           <Loader2 className="spin" size={22} />
         ) : (
           <CheckCircle2 size={22} />

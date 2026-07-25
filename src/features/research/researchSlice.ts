@@ -1,12 +1,20 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit"
 import {
   createResearchJobFromSuggestion,
+  fetchResearchEvidence,
+  fetchResearchJob,
+  fetchResearchReport,
+  fetchResearchSources,
   fetchResearchSuggestions,
+  regenerateResearchReport,
 } from "./researchApi"
 import type {
   CreateResearchJobFromSuggestionRequest,
+  ResearchEvidenceChunk,
   ResearchJob,
   ResearchJobEvent,
+  ResearchReport,
+  ResearchSource,
   ResearchSuggestion,
   ResearchSuggestionRequest,
 } from "./types"
@@ -22,6 +30,12 @@ type ResearchState = {
   jobStatus: RequestStatus
   job: ResearchJob | null
   events: ResearchJobEvent[]
+  sources: ResearchSource[]
+  sourcesStatus: RequestStatus
+  evidence: ResearchEvidenceChunk[]
+  evidenceStatus: RequestStatus
+  report: ResearchReport | null
+  reportStatus: RequestStatus
   error: string | null
 }
 
@@ -34,6 +48,12 @@ const initialState: ResearchState = {
   jobStatus: "idle",
   job: null,
   events: [],
+  sources: [],
+  sourcesStatus: "idle",
+  evidence: [],
+  evidenceStatus: "idle",
+  report: null,
+  reportStatus: "idle",
   error: null,
 }
 
@@ -46,6 +66,31 @@ export const startResearchJobFromSuggestion = createAsyncThunk(
   "research/startJobFromSuggestion",
   async (payload: CreateResearchJobFromSuggestionRequest) =>
     createResearchJobFromSuggestion(payload),
+)
+
+export const refreshResearchJob = createAsyncThunk(
+  "research/refreshJob",
+  async (jobId: string) => fetchResearchJob(jobId),
+)
+
+export const requestResearchSources = createAsyncThunk(
+  "research/requestSources",
+  async (jobId: string) => fetchResearchSources(jobId),
+)
+
+export const requestResearchEvidence = createAsyncThunk(
+  "research/requestEvidence",
+  async (jobId: string) => fetchResearchEvidence(jobId),
+)
+
+export const requestResearchReport = createAsyncThunk(
+  "research/requestReport",
+  async (jobId: string) => fetchResearchReport(jobId),
+)
+
+export const regenerateCurrentReport = createAsyncThunk(
+  "research/regenerateReport",
+  async (jobId: string) => regenerateResearchReport(jobId),
 )
 
 const researchSlice = createSlice({
@@ -80,6 +125,12 @@ const researchSlice = createSlice({
         state.selectedSuggestion = null
         state.job = null
         state.events = []
+        state.sources = []
+        state.sourcesStatus = "idle"
+        state.evidence = []
+        state.evidenceStatus = "idle"
+        state.report = null
+        state.reportStatus = "idle"
       })
       .addCase(requestResearchSuggestions.fulfilled, (state, action) => {
         state.suggestionsStatus = "succeeded"
@@ -98,10 +149,64 @@ const researchSlice = createSlice({
         state.jobStatus = "succeeded"
         state.job = action.payload
         state.events = []
+        state.sources = []
+        state.sourcesStatus = "idle"
+        state.evidence = []
+        state.evidenceStatus = "idle"
+        state.report = null
+        state.reportStatus = "idle"
       })
       .addCase(startResearchJobFromSuggestion.rejected, (state, action) => {
         state.jobStatus = "failed"
         state.error = action.error.message ?? "Unable to start research job"
+      })
+      .addCase(refreshResearchJob.fulfilled, (state, action) => {
+        state.job = action.payload
+      })
+      .addCase(requestResearchSources.pending, (state) => {
+        state.sourcesStatus = "loading"
+      })
+      .addCase(requestResearchSources.fulfilled, (state, action) => {
+        state.sourcesStatus = "succeeded"
+        state.sources = action.payload
+      })
+      .addCase(requestResearchSources.rejected, (state, action) => {
+        state.sourcesStatus = "failed"
+        state.error = action.error.message ?? "Unable to load discovered sources"
+      })
+      .addCase(requestResearchEvidence.pending, (state) => {
+        state.evidenceStatus = "loading"
+      })
+      .addCase(requestResearchEvidence.fulfilled, (state, action) => {
+        state.evidenceStatus = "succeeded"
+        state.evidence = action.payload
+      })
+      .addCase(requestResearchEvidence.rejected, (state, action) => {
+        state.evidenceStatus = "failed"
+        state.error = action.error.message ?? "Unable to load evidence chunks"
+      })
+      .addCase(requestResearchReport.pending, (state) => {
+        state.reportStatus = "loading"
+      })
+      .addCase(requestResearchReport.fulfilled, (state, action) => {
+        state.reportStatus = "succeeded"
+        state.report = action.payload
+      })
+      .addCase(requestResearchReport.rejected, (state, action) => {
+        state.reportStatus = "failed"
+        state.error = action.error.message ?? "Unable to load report"
+      })
+      .addCase(regenerateCurrentReport.pending, (state) => {
+        state.reportStatus = "loading"
+        state.error = null
+      })
+      .addCase(regenerateCurrentReport.fulfilled, (state, action) => {
+        state.reportStatus = "succeeded"
+        state.report = action.payload
+      })
+      .addCase(regenerateCurrentReport.rejected, (state, action) => {
+        state.reportStatus = "failed"
+        state.error = action.error.message ?? "Unable to regenerate report"
       })
   },
 })

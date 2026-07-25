@@ -40,3 +40,42 @@ export type CreateResearchJobFromSuggestionRequest = {
   suggestion_id: string
   budget_policy?: string
 }
+
+export type ResearchSource = {
+  id: string
+  job_id: string
+  query: string
+  title: string
+  url: string
+  domain: string
+  snippet: string | null
+  score: number
+  credibility_score: number
+  freshness: string
+  status: string
+  rank: number
+}
+
+export type ResearchEvidenceChunk = {
+  id: string
+  job_id: string
+  source_id: string
+  source_title: string
+  source_url: string
+  claim: string
+  chunk_text: string
+  relevance_score: number
+  rank: number
+  metadata: Record<string, string | number | null>
+}
+
+export type ResearchReport = {
+  id: string
+  job_id: string
+  title: string
+  summary: string
+  content: string
+  citation_count: number
+  verification_score: number
+  status: string
+}

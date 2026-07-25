@@ -1,7 +1,10 @@
 import { httpClient } from "../../shared/api/httpClient"
 import type {
   CreateResearchJobFromSuggestionRequest,
+  ResearchEvidenceChunk,
   ResearchJob,
+  ResearchReport,
+  ResearchSource,
   ResearchSuggestionRequest,
   ResearchSuggestionResponse,
 } from "./types"
@@ -22,6 +25,39 @@ export async function createResearchJobFromSuggestion(
   const response = await httpClient.post<ResearchJob>(
     "/research/jobs/from-suggestion",
     payload,
+  )
+  return response.data
+}
+
+export async function fetchResearchJob(jobId: string) {
+  const response = await httpClient.get<ResearchJob>(`/research/jobs/${jobId}`)
+  return response.data
+}
+
+export async function fetchResearchSources(jobId: string) {
+  const response = await httpClient.get<ResearchSource[]>(
+    `/research/jobs/${jobId}/sources`,
+  )
+  return response.data
+}
+
+export async function fetchResearchEvidence(jobId: string) {
+  const response = await httpClient.get<ResearchEvidenceChunk[]>(
+    `/research/jobs/${jobId}/evidence`,
+  )
+  return response.data
+}
+
+export async function fetchResearchReport(jobId: string) {
+  const response = await httpClient.get<ResearchReport>(
+    `/research/jobs/${jobId}/report`,
+  )
+  return response.data
+}
+
+export async function regenerateResearchReport(jobId: string) {
+  const response = await httpClient.post<ResearchReport>(
+    `/research/jobs/${jobId}/report/regenerate`,
   )
   return response.data
 }
