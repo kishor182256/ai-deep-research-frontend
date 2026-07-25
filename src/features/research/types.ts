@@ -79,3 +79,26 @@ export type ResearchReport = {
   verification_score: number
   status: string
 }
+
+export type ResearchVerification = {
+  id: string
+  job_id: string
+  status: string
+  score: number
+  citation_coverage: number
+  checked_claims: number
+  supported_claims: number
+  warning_count: number
+  warnings: string[]
+  unsupported_claims: string[]
+  quality_gate: {
+    passed: boolean
+    status: string
+    minimum_score: number
+    minimum_citation_coverage: number
+    message: string
+  }
+  model_provider: string
+  model_name: string
+  routing_reason: string
+}

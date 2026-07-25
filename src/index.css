@@ -503,6 +503,109 @@ input:disabled {
   line-height: 1.55;
 }
 
+.confidence-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.confidence-panel.passed {
+  border-color: #bfe3c4;
+  background: #f4fbf5;
+}
+
+.confidence-panel.attention {
+  border-color: #ead5aa;
+  background: #fffaf0;
+}
+
+.confidence-main {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.confidence-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #111111;
+}
+
+.confidence-main strong,
+.confidence-main small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.confidence-main strong {
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+
+.confidence-main small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.confidence-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.confidence-stats span {
+  min-height: 26px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: #333333;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.verification-warnings {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid #f0d5d5;
+  border-radius: 8px;
+  background: #fff7f7;
+}
+
+.warning-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8f1d1d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.verification-warnings ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #6f3434;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .report-content pre {
   max-height: 520px;
   margin: 0;
@@ -606,6 +709,14 @@ input:disabled {
   }
 
   .report-actions {
+    justify-content: flex-start;
+  }
+
+  .confidence-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .confidence-stats {
     justify-content: flex-start;
   }
 

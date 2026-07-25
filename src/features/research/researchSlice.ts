@@ -6,6 +6,7 @@ import {
   fetchResearchReport,
   fetchResearchSources,
   fetchResearchSuggestions,
+  fetchResearchVerification,
   regenerateResearchReport,
 } from "./researchApi"
 import type {
@@ -17,6 +18,7 @@ import type {
   ResearchSource,
   ResearchSuggestion,
   ResearchSuggestionRequest,
+  ResearchVerification,
 } from "./types"
 
 type RequestStatus = "idle" | "loading" | "succeeded" | "failed"
@@ -36,6 +38,8 @@ type ResearchState = {
   evidenceStatus: RequestStatus
   report: ResearchReport | null
   reportStatus: RequestStatus
+  verification: ResearchVerification | null
+  verificationStatus: RequestStatus
   error: string | null
 }
 
@@ -54,6 +58,8 @@ const initialState: ResearchState = {
   evidenceStatus: "idle",
   report: null,
   reportStatus: "idle",
+  verification: null,
+  verificationStatus: "idle",
   error: null,
 }
 
@@ -86,6 +92,11 @@ export const requestResearchEvidence = createAsyncThunk(
 export const requestResearchReport = createAsyncThunk(
   "research/requestReport",
   async (jobId: string) => fetchResearchReport(jobId),
+)
+
+export const requestResearchVerification = createAsyncThunk(
+  "research/requestVerification",
+  async (jobId: string) => fetchResearchVerification(jobId),
 )
 
 export const regenerateCurrentReport = createAsyncThunk(
@@ -131,6 +142,8 @@ const researchSlice = createSlice({
         state.evidenceStatus = "idle"
         state.report = null
         state.reportStatus = "idle"
+        state.verification = null
+        state.verificationStatus = "idle"
       })
       .addCase(requestResearchSuggestions.fulfilled, (state, action) => {
         state.suggestionsStatus = "succeeded"
@@ -155,6 +168,8 @@ const researchSlice = createSlice({
         state.evidenceStatus = "idle"
         state.report = null
         state.reportStatus = "idle"
+        state.verification = null
+        state.verificationStatus = "idle"
       })
       .addCase(startResearchJobFromSuggestion.rejected, (state, action) => {
         state.jobStatus = "failed"
@@ -196,16 +211,30 @@ const researchSlice = createSlice({
         state.reportStatus = "failed"
         state.error = action.error.message ?? "Unable to load report"
       })
+      .addCase(requestResearchVerification.pending, (state) => {
+        state.verificationStatus = "loading"
+      })
+      .addCase(requestResearchVerification.fulfilled, (state, action) => {
+        state.verificationStatus = "succeeded"
+        state.verification = action.payload
+      })
+      .addCase(requestResearchVerification.rejected, (state, action) => {
+        state.verificationStatus = "failed"
+        state.error = action.error.message ?? "Unable to load verification"
+      })
       .addCase(regenerateCurrentReport.pending, (state) => {
         state.reportStatus = "loading"
+        state.verificationStatus = "loading"
         state.error = null
       })
       .addCase(regenerateCurrentReport.fulfilled, (state, action) => {
         state.reportStatus = "succeeded"
         state.report = action.payload
+        state.verificationStatus = "idle"
       })
       .addCase(regenerateCurrentReport.rejected, (state, action) => {
         state.reportStatus = "failed"
+        state.verificationStatus = "failed"
         state.error = action.error.message ?? "Unable to regenerate report"
       })
   },

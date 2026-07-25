@@ -14,6 +14,7 @@ import {
   requestResearchReport,
   requestResearchSuggestions,
   requestResearchSources,
+  requestResearchVerification,
   startResearchJobFromSuggestion,
   suggestionSelected,
 } from "../features/research/researchSlice"
@@ -36,6 +37,8 @@ export default function ResearchAgendaPage() {
     suggestions,
     suggestionsStatus,
     topic,
+    verification,
+    verificationStatus,
   } = useAppSelector((state) => state.research)
 
   useResearchJobStream(job?.id)
@@ -79,7 +82,37 @@ export default function ResearchAgendaPage() {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchReport(job.id))
     }
-  }, [dispatch, evidenceStatus, eventTypes, events.length, job?.id, reportStatus, sourcesStatus])
+
+    if (
+      eventTypes.has("verification_completed") &&
+      verificationStatus === "idle"
+    ) {
+      void dispatch(refreshResearchJob(job.id))
+      void dispatch(requestResearchReport(job.id))
+      void dispatch(requestResearchVerification(job.id))
+    }
+
+    if (
+      job.status === "completed" &&
+      report &&
+      !verification &&
+      verificationStatus === "idle"
+    ) {
+      void dispatch(requestResearchVerification(job.id))
+    }
+  }, [
+    dispatch,
+    evidenceStatus,
+    eventTypes,
+    events.length,
+    job?.id,
+    job?.status,
+    report,
+    reportStatus,
+    sourcesStatus,
+    verification,
+    verificationStatus,
+  ])
 
   const sourcesVisible =
     Boolean(job) &&
@@ -95,6 +128,8 @@ export default function ResearchAgendaPage() {
     Boolean(job) &&
     (eventTypes.has("report_generation_started") ||
       eventTypes.has("report_generated") ||
+      eventTypes.has("verification_started") ||
+      eventTypes.has("verification_completed") ||
       Boolean(report))
 
   function handleTopicSubmit(nextTopic: string) {
@@ -170,9 +205,17 @@ export default function ResearchAgendaPage() {
         onRegenerate={() => {
           if (job?.id) {
             void dispatch(regenerateCurrentReport(job.id))
+              .unwrap()
+              .then(() => dispatch(requestResearchVerification(job.id)))
+              .catch(() => undefined)
           }
         }}
         report={report}
+        verification={verification}
+        verificationLoading={
+          verificationStatus === "loading" ||
+          (eventTypes.has("verification_started") && verificationStatus !== "succeeded")
+        }
         visible={reportVisible}
       />
     </main>
