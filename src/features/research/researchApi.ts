@@ -3,12 +3,14 @@ import type {
   ContentGenerationRequest,
   ContentPackage,
   CreateResearchJobFromSuggestionRequest,
+  CreateResearchJobFromSuggestionsRequest,
   ResearchCostSummary,
   ResearchEvidenceChunk,
   ResearchJob,
   ResearchMemoryMatch,
   ResearchReport,
   ResearchSource,
+  ResearchSourceSelectionRequest,
   ResearchSuggestionRequest,
   ResearchSuggestionResponse,
   ResearchVerification,
@@ -41,6 +43,16 @@ export async function createResearchJobFromSuggestion(
   return response.data
 }
 
+export async function createResearchJobFromSuggestions(
+  payload: CreateResearchJobFromSuggestionsRequest,
+) {
+  const response = await httpClient.post<ResearchJob>(
+    "/research/jobs/from-suggestions",
+    payload,
+  )
+  return response.data
+}
+
 export async function fetchResearchJob(jobId: string) {
   const response = await httpClient.get<ResearchJob>(`/research/jobs/${jobId}`)
   return response.data
@@ -49,6 +61,17 @@ export async function fetchResearchJob(jobId: string) {
 export async function fetchResearchSources(jobId: string) {
   const response = await httpClient.get<ResearchSource[]>(
     `/research/jobs/${jobId}/sources`,
+  )
+  return response.data
+}
+
+export async function selectResearchSources(
+  jobId: string,
+  payload: ResearchSourceSelectionRequest,
+) {
+  const response = await httpClient.post<ResearchJob>(
+    `/research/jobs/${jobId}/sources/select`,
+    payload,
   )
   return response.data
 }

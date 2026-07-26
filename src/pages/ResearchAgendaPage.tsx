@@ -2,20 +2,18 @@ import { useEffect, useMemo, useState } from "react"
 import { useAppDispatch, useAppSelector } from "../app/hooks"
 import { AgendaComposer } from "../features/research/components/AgendaComposer"
 import { ContentStudioPanel } from "../features/research/components/ContentStudioPanel"
-import { EvidencePanel } from "../features/research/components/EvidencePanel"
-import { ReportPanel } from "../features/research/components/ReportPanel"
-import { ResearchMemoryPanel } from "../features/research/components/ResearchMemoryPanel"
 import { ResearchMetricsPanel } from "../features/research/components/ResearchMetricsPanel"
 import { ResearchJobPanel } from "../features/research/components/ResearchJobPanel"
 import { SourcesPanel } from "../features/research/components/SourcesPanel"
 import { SuggestionsPanel } from "../features/research/components/SuggestionsPanel"
+import { TopicSidebar } from "../features/research/components/TopicSidebar"
+import { WorkflowStatusPanel } from "../features/research/components/WorkflowStatusPanel"
 import { useResearchJobStream } from "../features/research/hooks/useResearchJobStream"
 import {
   regenerateCurrentReport,
   generateCreatorContent,
   openResearchMemoryJob,
   refreshResearchJob,
-  requestResearchCosts,
   requestResearchEvidence,
   requestResearchMemory,
   requestResearchReport,
@@ -24,8 +22,11 @@ import {
   requestResearchVerification,
   reviewCurrentResearchJob,
   retryCurrentResearchJob,
-  startResearchJobFromSuggestion,
-  suggestionSelected,
+  selectSourcesForCurrentJob,
+  sourceToggled,
+  startResearchJobFromSuggestions,
+  suggestionToggled,
+  resetResearchState,
 } from "../features/research/researchSlice"
 import type { ContentPlatform, ResearchSuggestion } from "../features/research/types"
 
@@ -33,10 +34,9 @@ export default function ResearchAgendaPage() {
   const dispatch = useAppDispatch()
   const [selectedContentPlatform, setSelectedContentPlatform] =
     useState<ContentPlatform>("youtube_shorts")
+  const [recentTopics, setRecentTopics] = useState<string[]>([])
   const {
     error,
-    costSummary,
-    costStatus,
     contentPackage,
     contentStatus,
     evidence,
@@ -54,9 +54,12 @@ export default function ResearchAgendaPage() {
     suggestionCacheAgeSeconds,
     suggestionCacheHit,
     sources,
+    selectedSourceIds,
+    sourceSelectionStatus,
     sourcesStatus,
     suggestions,
     suggestionsStatus,
+    selectedSuggestions,
     topic,
     verification,
     verificationStatus,
@@ -71,6 +74,23 @@ export default function ResearchAgendaPage() {
     [events],
   )
   const latestEventType = events.at(-1)?.type
+  const hasStartedResearch = isJobLoading || Boolean(job)
+  const waitingForSourceSelection = job?.status === "awaiting_source_selection"
+  const sourceWorkflowStarted =
+    sourceSelectionStatus === "loading" ||
+    eventTypes.has("sources_selected") ||
+    eventTypes.has("extraction_ready") ||
+    eventTypes.has("extraction_started") ||
+    eventTypes.has("evidence_extracted") ||
+    eventTypes.has("report_generation_started") ||
+    eventTypes.has("verification_started")
+  const workflowIsRunning =
+    isJobLoading ||
+    job?.status === "queued" ||
+    job?.status === "running" ||
+    job?.status === "awaiting_extraction" ||
+    job?.status === "awaiting_report" ||
+    job?.status === "awaiting_verification"
 
   useEffect(() => {
     if (!job?.id) {
@@ -87,7 +107,6 @@ export default function ResearchAgendaPage() {
     ) {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchSources(job.id))
-      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -96,7 +115,6 @@ export default function ResearchAgendaPage() {
     ) {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchEvidence(job.id))
-      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -105,7 +123,6 @@ export default function ResearchAgendaPage() {
     ) {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchReport(job.id))
-      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -115,7 +132,6 @@ export default function ResearchAgendaPage() {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchReport(job.id))
       void dispatch(requestResearchVerification(job.id))
-      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -148,14 +164,7 @@ export default function ResearchAgendaPage() {
       void dispatch(requestResearchVerification(job.id))
     }
 
-    if (
-      job.status === "completed" &&
-      costStatus === "idle"
-    ) {
-      void dispatch(requestResearchCosts(job.id))
-    }
   }, [
-    costStatus,
     dispatch,
     evidenceStatus,
     eventTypes,
@@ -172,27 +181,8 @@ export default function ResearchAgendaPage() {
 
   const sourcesVisible =
     Boolean(job) &&
-    (eventTypes.has("source_discovery_started") ||
-      eventTypes.has("review_started") ||
-      eventTypes.has("sources_discovered") ||
-      eventTypes.has("review_sources_discovered") ||
-      sources.length > 0)
-  const evidenceVisible =
-    Boolean(job) &&
-    (eventTypes.has("extraction_started") ||
-      eventTypes.has("review_extraction_started") ||
-      eventTypes.has("evidence_extracted") ||
-      eventTypes.has("review_evidence_extracted") ||
-      evidence.length > 0)
-  const reportVisible =
-    Boolean(job) &&
-    (eventTypes.has("report_generation_started") ||
-      eventTypes.has("review_report_generation_started") ||
-      eventTypes.has("report_generated") ||
-      eventTypes.has("review_completed") ||
-      eventTypes.has("verification_started") ||
-      eventTypes.has("verification_completed") ||
-      Boolean(report))
+    waitingForSourceSelection &&
+    sourceSelectionStatus !== "loading"
   const metricsVisible =
     Boolean(job) &&
     (job?.status !== "queued" ||
@@ -202,166 +192,199 @@ export default function ResearchAgendaPage() {
       Boolean(verification))
 
   function handleTopicSubmit(nextTopic: string) {
+    const cleanTopic = nextTopic.trim()
+    if (!cleanTopic) {
+      return
+    }
+
+    setRecentTopics((previousTopics) => [
+      cleanTopic,
+      ...previousTopics.filter((item) => item !== cleanTopic),
+    ].slice(0, 12))
     void dispatch(
       requestResearchSuggestions({
-        topic: nextTopic,
+        topic: cleanTopic,
       }),
     )
-    void dispatch(requestResearchMemory(nextTopic))
+    void dispatch(requestResearchMemory(cleanTopic))
   }
 
-  function handleSuggestionSelect(suggestion: ResearchSuggestion) {
-    dispatch(suggestionSelected(suggestion))
+  function handleNewResearch() {
+    dispatch(resetResearchState())
+  }
+
+  function handleSuggestionToggle(suggestion: ResearchSuggestion) {
+    dispatch(suggestionToggled(suggestion))
+  }
+
+  function handleResearchStart() {
+    if (selectedSuggestions.length === 0) {
+      return
+    }
+
     void dispatch(
-      startResearchJobFromSuggestion({
-        suggestion_id: suggestion.id,
+      startResearchJobFromSuggestions({
+        suggestion_ids: selectedSuggestions.map((suggestion) => suggestion.id),
         budget_policy: "starter",
+      }),
+    )
+  }
+
+  function handleSourceUse() {
+    if (!job?.id || selectedSourceIds.length === 0) {
+      return
+    }
+
+    void dispatch(
+      selectSourcesForCurrentJob({
+        jobId: job.id,
+        sourceIds: selectedSourceIds,
       }),
     )
   }
 
   return (
     <main className="agenda-page">
-      <section className="agenda-hero">
-        <p className="eyebrow">AI Deep Research</p>
-        <h1>What&apos;s on the agenda today?</h1>
-        <AgendaComposer disabled={isSuggestionsLoading} onSubmit={handleTopicSubmit} />
-        <p className="helper-text">
-          Enter a topic. We&apos;ll suggest the top 10 research directions before
-          starting the deeper workflow.
-        </p>
-      </section>
-
-      {error ? <div className="error-banner">{error}</div> : null}
-
-      {isSuggestionsLoading ? (
-        <section className="loading-panel">
-          <span className="loading-bar" />
-          <p>Finding useful research angles for {topic}...</p>
-        </section>
-      ) : null}
-
-      <SuggestionsPanel
-        cacheAgeSeconds={suggestionCacheAgeSeconds}
-        cacheHit={suggestionCacheHit}
-        disabled={isJobLoading}
-        onSelect={handleSuggestionSelect}
-        selectedSuggestion={selectedSuggestion}
-        suggestions={suggestions}
-      />
-
-      <ResearchJobPanel
-        events={events}
-        job={job}
-        loading={isJobLoading}
-        onRetry={() => {
-          if (job?.id) {
-            void dispatch(retryCurrentResearchJob(job.id))
-          }
-        }}
-        retryLoading={retryStatus === "loading"}
-        selectedSuggestion={selectedSuggestion}
-      />
-
-      <ResearchMemoryPanel
-        loading={memoryStatus === "loading"}
-        matches={memoryMatches}
-        onOpen={(jobId) => {
+      <TopicSidebar
+        currentTopic={topic}
+        memoryLoading={memoryStatus === "loading"}
+        memoryMatches={memoryMatches}
+        onMemoryOpen={(jobId) => {
           void dispatch(openResearchMemoryJob(jobId))
         }}
-        visible={suggestionsStatus !== "idle"}
+        onNewResearch={handleNewResearch}
+        onTopicSelect={handleTopicSubmit}
+        recentTopics={recentTopics}
       />
 
-      <ResearchMetricsPanel
-        costSummary={costSummary}
-        evidence={evidence}
-        job={job}
-        loading={costStatus === "loading"}
-        report={report}
-        sources={sources}
-        verification={verification}
-        visible={metricsVisible}
-      />
-
-      <SourcesPanel
-        loading={
-          (eventTypes.has("source_discovery_started") ||
-            eventTypes.has("review_started")) &&
-          sourcesStatus !== "succeeded"
-        }
-        sources={sources}
-        visible={sourcesVisible}
-      />
-
-      <EvidencePanel
-        evidence={evidence}
-        loading={
-          (eventTypes.has("extraction_started") ||
-            eventTypes.has("review_extraction_started")) &&
-          evidenceStatus !== "succeeded"
-        }
-        visible={evidenceVisible}
-      />
-
-      <ReportPanel
-        contentLoading={contentStatus === "loading"}
-        loading={
-          reportStatus === "loading" ||
-          (eventTypes.has("report_generation_started") && reportStatus !== "succeeded")
-        }
-        onRegenerate={() => {
-          if (job?.id) {
-            void dispatch(regenerateCurrentReport(job.id))
-              .unwrap()
-              .then(() => dispatch(requestResearchVerification(job.id)))
-              .then(() => dispatch(requestResearchCosts(job.id)))
-              .catch(() => undefined)
+      <section className="agenda-workspace">
+        <ResearchMetricsPanel
+          contentLoading={contentStatus === "loading"}
+          evidence={evidence}
+          job={job}
+          loading={jobStatus === "loading"}
+          onGenerateContent={() => {
+            if (report?.id) {
+              void dispatch(
+                generateCreatorContent({
+                  platform: selectedContentPlatform,
+                  source_report_id: report.id,
+                }),
+              )
+            }
+          }}
+          onRegenerate={() => {
+            if (job?.id) {
+              void dispatch(regenerateCurrentReport(job.id))
+                .unwrap()
+                .then(() => dispatch(requestResearchVerification(job.id)))
+                .catch(() => undefined)
+            }
+          }}
+          onReview={() => {
+            if (job?.id) {
+              void dispatch(reviewCurrentResearchJob(job.id))
+                .unwrap()
+                .catch(() => dispatch(refreshResearchJob(job.id)))
+            }
+          }}
+          report={report}
+          regenerateLoading={
+            reportStatus === "loading" ||
+            (eventTypes.has("report_generation_started") && reportStatus !== "succeeded")
           }
-        }}
-        onGenerateContent={() => {
-          if (report?.id) {
-            void dispatch(
-              generateCreatorContent({
-                platform: selectedContentPlatform,
-                source_report_id: report.id,
-              }),
-            )
-          }
-        }}
-        onReview={() => {
-          if (job?.id) {
-            void dispatch(reviewCurrentResearchJob(job.id))
-              .unwrap()
-              .catch(() => dispatch(refreshResearchJob(job.id)))
-          }
-        }}
-        report={report}
-        reviewLoading={reviewStatus === "loading" || Boolean(job?.current_step?.startsWith("review"))}
-        verification={verification}
-        verificationLoading={
-          verificationStatus === "loading" ||
-          (eventTypes.has("verification_started") && verificationStatus !== "succeeded")
-        }
-        visible={reportVisible}
-      />
+          reviewLoading={reviewStatus === "loading" || Boolean(job?.current_step?.startsWith("review"))}
+          sources={sources}
+          verification={verification}
+          visible={metricsVisible}
+        />
 
-      <ContentStudioPanel
-        contentPackage={contentPackage}
-        loading={contentStatus === "loading"}
-        onGenerate={() => {
-          if (report?.id) {
-            void dispatch(
-              generateCreatorContent({
-                platform: selectedContentPlatform,
-                source_report_id: report.id,
-              }),
-            )
-          }
-        }}
-        onPlatformChange={setSelectedContentPlatform}
-        selectedPlatform={selectedContentPlatform}
-        visible={Boolean(report)}
-      />
+        <section className={`agenda-hero ${hasStartedResearch ? "compact" : ""}`}>
+          <p className="eyebrow">AI Deep Research</p>
+          <h1>What&apos;s on the agenda today?</h1>
+          <AgendaComposer disabled={isSuggestionsLoading || isJobLoading} onSubmit={handleTopicSubmit} />
+          {!hasStartedResearch ? (
+            <p className="helper-text">
+              Enter a topic. We&apos;ll suggest the top 10 research directions before
+              starting the deeper workflow.
+            </p>
+          ) : null}
+        </section>
+
+        {error ? <div className="error-banner">{error}</div> : null}
+
+        {isSuggestionsLoading && !hasStartedResearch ? (
+          <section className="loading-panel">
+            <span className="loading-bar" />
+            <p>Finding useful research angles for {topic}...</p>
+          </section>
+        ) : null}
+
+        {!hasStartedResearch ? (
+          <SuggestionsPanel
+            cacheAgeSeconds={suggestionCacheAgeSeconds}
+            cacheHit={suggestionCacheHit}
+            disabled={isJobLoading}
+            onStart={handleResearchStart}
+            onToggle={handleSuggestionToggle}
+            selectedSuggestions={selectedSuggestions}
+            starting={isJobLoading}
+            suggestions={suggestions}
+          />
+        ) : null}
+
+        <WorkflowStatusPanel
+          events={events}
+          job={job}
+          mode={sourceWorkflowStarted ? "sources" : "research"}
+          visible={Boolean(hasStartedResearch && workflowIsRunning && !waitingForSourceSelection)}
+        />
+
+        {job?.status === "failed" ? (
+          <ResearchJobPanel
+            events={events}
+            job={job}
+            loading={isJobLoading}
+            onRetry={() => {
+              if (job?.id) {
+                void dispatch(retryCurrentResearchJob(job.id))
+              }
+            }}
+            retryLoading={retryStatus === "loading"}
+            selectedSuggestion={selectedSuggestion}
+            selectedSuggestions={selectedSuggestions}
+          />
+        ) : null}
+
+        <SourcesPanel
+          loading={sourcesStatus === "loading"}
+          onToggleSource={(sourceId) => dispatch(sourceToggled(sourceId))}
+          onUseSelected={handleSourceUse}
+          selectedSourceIds={selectedSourceIds}
+          selecting={sourceSelectionStatus === "loading"}
+          sources={sources}
+          visible={sourcesVisible}
+          waitingForSelection={waitingForSourceSelection}
+        />
+
+        <ContentStudioPanel
+          contentPackage={contentPackage}
+          loading={contentStatus === "loading"}
+          onGenerate={() => {
+            if (report?.id) {
+              void dispatch(
+                generateCreatorContent({
+                  platform: selectedContentPlatform,
+                  source_report_id: report.id,
+                }),
+              )
+            }
+          }}
+          onPlatformChange={setSelectedContentPlatform}
+          selectedPlatform={selectedContentPlatform}
+          visible={contentStatus === "loading" || Boolean(contentPackage)}
+        />
+      </section>
     </main>
   )
 }

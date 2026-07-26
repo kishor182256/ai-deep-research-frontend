@@ -1,10 +1,11 @@
 import { AlertTriangle, CheckCircle2, Clipboard, Download, RefreshCw, ShieldCheck, Video } from "lucide-react"
 import { useState } from "react"
-import type { ResearchReport, ResearchVerification } from "../types"
+import type { ResearchEvidenceChunk, ResearchReport, ResearchVerification } from "../types"
 
 type ReportPanelProps = {
   loading: boolean
   contentLoading: boolean
+  evidence: ResearchEvidenceChunk[]
   onGenerateContent: () => void
   onRegenerate: () => void
   onReview: () => void
@@ -17,6 +18,7 @@ type ReportPanelProps = {
 
 export function ReportPanel({
   contentLoading,
+  evidence,
   loading,
   onGenerateContent,
   onRegenerate,
@@ -27,20 +29,16 @@ export function ReportPanel({
   verificationLoading,
   visible,
 }: ReportPanelProps) {
-  const [copied, setCopied] = useState(false)
+  const [copiedEvidence, setCopiedEvidence] = useState(false)
 
   if (!visible) {
     return null
   }
 
-  async function handleCopy() {
-    if (!report) {
-      return
-    }
-
-    await navigator.clipboard.writeText(report.content)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
+  async function handleCopyEvidence() {
+    await navigator.clipboard.writeText(formatEvidenceChunks(evidence))
+    setCopiedEvidence(true)
+    window.setTimeout(() => setCopiedEvidence(false), 1600)
   }
 
   function handleDownload() {
@@ -64,11 +62,17 @@ export function ReportPanel({
   const confidenceLabel = getConfidenceLabel(verification?.status, confidenceScore)
   const hasWarnings = Boolean(verification?.warnings.length)
   const canReview = Boolean(verification && !verification.quality_gate.passed)
+  const isLowConfidence = Boolean(
+    verification &&
+      (!verification.quality_gate.passed ||
+        verification.score < 0.8 ||
+        verification.citation_coverage < 0.8),
+  )
 
   return (
-    <section className="artifact-panel report-panel" aria-label="Cited report">
+    <section className="artifact-panel report-panel" aria-label="Report">
       <div className="section-heading">
-        <p>Cited report</p>
+        <p>Report</p>
         <span>
           {loading
             ? "Writing report"
@@ -89,9 +93,9 @@ export function ReportPanel({
               <p className="report-summary">{report.summary}</p>
             </div>
             <div className="report-actions">
-              <button type="button" onClick={handleCopy}>
+              <button disabled={evidence.length === 0} type="button" onClick={handleCopyEvidence}>
                 <Clipboard size={16} />
-                <span>{copied ? "Copied" : "Copy"}</span>
+                <span>{copiedEvidence ? "Copied" : "Evidence chunks"}</span>
               </button>
               <button type="button" onClick={handleDownload}>
                 <Download size={16} />
@@ -101,10 +105,12 @@ export function ReportPanel({
                 <Video className={contentLoading ? "spin" : undefined} size={16} />
                 <span>{contentLoading ? "Generating" : "Generate content"}</span>
               </button>
-              <button disabled={loading} type="button" onClick={onRegenerate}>
-                <RefreshCw className={loading ? "spin" : undefined} size={16} />
-                <span>Regenerate</span>
-              </button>
+              {isLowConfidence ? (
+                <button disabled={loading} type="button" onClick={onRegenerate}>
+                  <RefreshCw className={loading ? "spin" : undefined} size={16} />
+                  <span>Regenerate</span>
+                </button>
+              ) : null}
               {canReview ? (
                 <button disabled={reviewLoading} type="button" onClick={onReview}>
                   <ShieldCheck className={reviewLoading ? "spin" : undefined} size={16} />
@@ -177,4 +183,24 @@ function getConfidenceLabel(status: string | undefined, score: number) {
   }
 
   return "Confidence pending"
+}
+
+function formatEvidenceChunks(evidence: ResearchEvidenceChunk[]) {
+  if (evidence.length === 0) {
+    return "No evidence chunks are available yet."
+  }
+
+  return [
+    "# Evidence chunks",
+    "",
+    ...evidence.flatMap((chunk, index) => [
+      `## ${String(index + 1).padStart(2, "0")}. ${chunk.claim}`,
+      `Source: ${chunk.source_title}`,
+      `URL: ${chunk.source_url}`,
+      `Relevance: ${Math.round(chunk.relevance_score * 100)}%`,
+      "",
+      chunk.chunk_text,
+      "",
+    ]),
+  ].join("\n")
 }

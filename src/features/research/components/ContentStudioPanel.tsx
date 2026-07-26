@@ -111,8 +111,8 @@ export function ContentStudioPanel({
               <div>
                 <strong>{formatDepthStatus(contentPackage.script_depth_status)}</strong>
                 <small>
-                  {formatPlatform(contentPackage.platform)} now uses modular passes, shared story memory,
-                  consistency review, and a final composer.
+                  {formatPlatform(contentPackage.platform)} now adapts one canonical story through modular passes,
+                  shared story memory, consistency review, and a final composer.
                 </small>
               </div>
               <div className="confidence-stats">
@@ -146,8 +146,8 @@ export function ContentStudioPanel({
           {contentPackage.chapter_plan.length > 0 ? (
             <div className="chapter-planner">
               <div>
-                <strong>{contentPackage.platform === "youtube_long" ? "Long-form Chapter Planner" : "Platform Module Planner"}</strong>
-                <small>Each pass has a purpose, question flow, evidence requirement, retention plan, and transition.</small>
+                <strong>{contentPackage.platform === "youtube_long" ? "Long-form Story Adapter" : "Platform Story Adapter"}</strong>
+                <small>Each pass maps one canonical beat into a platform-native question flow, evidence requirement, visual plan, and transition.</small>
               </div>
               <div className="chapter-grid">
                 {contentPackage.chapter_plan.map((chapter) => (
@@ -261,7 +261,7 @@ export function ContentStudioPanel({
           {contentPackage.story_plan ? (
             <div className="story-plan">
               <div>
-                <strong>Story Planner</strong>
+                <strong>Canonical Story Planner</strong>
                 <small>{contentPackage.story_plan.format} - {contentPackage.story_plan.target_runtime}</small>
               </div>
               <p>{contentPackage.story_plan.story_arc}</p>

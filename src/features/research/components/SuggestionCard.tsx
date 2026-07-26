@@ -1,4 +1,3 @@
-import { ArrowRight } from "lucide-react"
 import type { ResearchSuggestion } from "../types"
 
 type SuggestionCardProps = {
@@ -6,31 +5,33 @@ type SuggestionCardProps = {
   suggestion: ResearchSuggestion
   selected: boolean
   disabled?: boolean
-  onSelect: (suggestion: ResearchSuggestion) => void
+  onToggle: (suggestion: ResearchSuggestion) => void
 }
 
 export function SuggestionCard({
   disabled,
   index,
-  onSelect,
+  onToggle,
   selected,
   suggestion,
 }: SuggestionCardProps) {
   return (
-    <button
-      type="button"
+    <label
       className={`suggestion-card${selected ? " selected" : ""}`}
-      onClick={() => onSelect(suggestion)}
-      disabled={disabled}
     >
+      <span className="suggestion-check">
+        <input
+          checked={selected}
+          disabled={disabled}
+          onChange={() => onToggle(suggestion)}
+          type="checkbox"
+        />
+      </span>
       <span className="suggestion-rank">{String(index + 1).padStart(2, "0")}</span>
       <span className="suggestion-content">
         <strong>{suggestion.title}</strong>
         <small>{suggestion.summary}</small>
       </span>
-      <span className="suggestion-action">
-        <ArrowRight size={18} />
-      </span>
-    </button>
+    </label>
   )
 }

@@ -5,6 +5,7 @@ type ResearchJobPanelProps = {
   job: ResearchJob | null
   events: ResearchJobEvent[]
   selectedSuggestion: ResearchSuggestion | null
+  selectedSuggestions: ResearchSuggestion[]
   loading: boolean
   onRetry: () => void
   retryLoading: boolean
@@ -17,14 +18,22 @@ export function ResearchJobPanel({
   onRetry,
   retryLoading,
   selectedSuggestion,
+  selectedSuggestions,
 }: ResearchJobPanelProps) {
   if (!job && !loading) {
     return null
   }
 
   const isRunning = loading || job?.status === "queued" || job?.status === "running"
+  const isWaiting = job?.status === "awaiting_source_selection"
   const isFailed = job?.status === "failed"
-  const latestEvent = events.at(-1)
+  const latestEvent = [...events]
+    .reverse()
+    .find((event) => event.type !== "selection_context_created")
+  const selectionLabel =
+    selectedSuggestions.length > 1
+      ? `${selectedSuggestions.length} research directions`
+      : selectedSuggestion?.title ?? "Selected research"
 
   return (
     <section className={`job-panel compact ${isFailed ? "failed" : ""}`} aria-label="Research job status">
@@ -41,13 +50,15 @@ export function ResearchJobPanel({
         <div className="job-status-copy">
           <strong>{job?.display_step ?? "Starting research"}</strong>
           <small>
-            {selectedSuggestion?.title ?? "Selected research"} - {job?.progress ?? 8}% -{" "}
+            {selectionLabel} - {job?.progress ?? 8}% -{" "}
             {formatRuntime(job?.runtime_seconds ?? 0)}
           </small>
           {latestEvent?.message ? <em>{latestEvent.message}</em> : null}
         </div>
         {isRunning ? (
           <span className="job-status-pill">Running</span>
+        ) : isWaiting ? (
+          <span className="job-status-pill">Waiting</span>
         ) : isFailed ? (
           <button className="job-retry-button" disabled={retryLoading} type="button" onClick={onRetry}>
             <RotateCcw className={retryLoading ? "spin" : undefined} size={14} />

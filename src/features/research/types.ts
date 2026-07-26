@@ -48,6 +48,12 @@ export type CreateResearchJobFromSuggestionRequest = {
   budget_policy?: string
 }
 
+export type CreateResearchJobFromSuggestionsRequest = {
+  project_id?: string | null
+  suggestion_ids: string[]
+  budget_policy?: string
+}
+
 export type ResearchSource = {
   id: string
   job_id: string
@@ -61,6 +67,10 @@ export type ResearchSource = {
   freshness: string
   status: string
   rank: number
+}
+
+export type ResearchSourceSelectionRequest = {
+  source_ids: string[]
 }
 
 export type ResearchEvidenceChunk = {
