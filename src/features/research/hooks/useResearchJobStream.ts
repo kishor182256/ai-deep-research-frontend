@@ -4,7 +4,10 @@ import { createEventStream } from "../../../shared/api/streamClient"
 import { jobEventReceived } from "../researchSlice"
 import type { ResearchJobEvent } from "../types"
 
-export function useResearchJobStream(jobId: string | null | undefined) {
+export function useResearchJobStream(
+  jobId: string | null | undefined,
+  streamKey?: string | null,
+) {
   const dispatch = useAppDispatch()
 
   useEffect(() => {
@@ -16,5 +19,5 @@ export function useResearchJobStream(jobId: string | null | undefined) {
       `/research/jobs/${jobId}/events`,
       (event) => dispatch(jobEventReceived(event)),
     )
-  }, [dispatch, jobId])
+  }, [dispatch, jobId, streamKey])
 }

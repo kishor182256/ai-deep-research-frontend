@@ -69,3 +69,10 @@ export async function regenerateResearchReport(jobId: string) {
   )
   return response.data
 }
+
+export async function reviewResearchJob(jobId: string) {
+  const response = await httpClient.post<ResearchJob>(
+    `/research/jobs/${jobId}/review`,
+  )
+  return response.data
+}

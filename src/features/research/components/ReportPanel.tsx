@@ -5,7 +5,9 @@ import type { ResearchReport, ResearchVerification } from "../types"
 type ReportPanelProps = {
   loading: boolean
   onRegenerate: () => void
+  onReview: () => void
   report: ResearchReport | null
+  reviewLoading: boolean
   verification: ResearchVerification | null
   verificationLoading: boolean
   visible: boolean
@@ -14,7 +16,9 @@ type ReportPanelProps = {
 export function ReportPanel({
   loading,
   onRegenerate,
+  onReview,
   report,
+  reviewLoading,
   verification,
   verificationLoading,
   visible,
@@ -55,6 +59,7 @@ export function ReportPanel({
   const citationCoverage = Math.round((verification?.citation_coverage ?? 0) * 100)
   const confidenceLabel = getConfidenceLabel(verification?.status, confidenceScore)
   const hasWarnings = Boolean(verification?.warnings.length)
+  const canReview = Boolean(verification && !verification.quality_gate.passed)
 
   return (
     <section className="artifact-panel report-panel" aria-label="Cited report">
@@ -92,6 +97,12 @@ export function ReportPanel({
                 <RefreshCw className={loading ? "spin" : undefined} size={16} />
                 <span>Regenerate</span>
               </button>
+              {canReview ? (
+                <button disabled={reviewLoading} type="button" onClick={onReview}>
+                  <ShieldCheck className={reviewLoading ? "spin" : undefined} size={16} />
+                  <span>{reviewLoading ? "Reviewing" : "Review evidence"}</span>
+                </button>
+              ) : null}
             </div>
           </div>
 

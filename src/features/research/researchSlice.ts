@@ -8,6 +8,7 @@ import {
   fetchResearchSuggestions,
   fetchResearchVerification,
   regenerateResearchReport,
+  reviewResearchJob,
 } from "./researchApi"
 import type {
   CreateResearchJobFromSuggestionRequest,
@@ -40,6 +41,7 @@ type ResearchState = {
   reportStatus: RequestStatus
   verification: ResearchVerification | null
   verificationStatus: RequestStatus
+  reviewStatus: RequestStatus
   error: string | null
 }
 
@@ -60,6 +62,7 @@ const initialState: ResearchState = {
   reportStatus: "idle",
   verification: null,
   verificationStatus: "idle",
+  reviewStatus: "idle",
   error: null,
 }
 
@@ -104,6 +107,11 @@ export const regenerateCurrentReport = createAsyncThunk(
   async (jobId: string) => regenerateResearchReport(jobId),
 )
 
+export const reviewCurrentResearchJob = createAsyncThunk(
+  "research/reviewJob",
+  async (jobId: string) => reviewResearchJob(jobId),
+)
+
 const researchSlice = createSlice({
   name: "research",
   initialState,
@@ -144,6 +152,7 @@ const researchSlice = createSlice({
         state.reportStatus = "idle"
         state.verification = null
         state.verificationStatus = "idle"
+        state.reviewStatus = "idle"
       })
       .addCase(requestResearchSuggestions.fulfilled, (state, action) => {
         state.suggestionsStatus = "succeeded"
@@ -170,6 +179,7 @@ const researchSlice = createSlice({
         state.reportStatus = "idle"
         state.verification = null
         state.verificationStatus = "idle"
+        state.reviewStatus = "idle"
       })
       .addCase(startResearchJobFromSuggestion.rejected, (state, action) => {
         state.jobStatus = "failed"
@@ -236,6 +246,22 @@ const researchSlice = createSlice({
         state.reportStatus = "failed"
         state.verificationStatus = "failed"
         state.error = action.error.message ?? "Unable to regenerate report"
+      })
+      .addCase(reviewCurrentResearchJob.pending, (state) => {
+        state.reviewStatus = "loading"
+        state.error = null
+      })
+      .addCase(reviewCurrentResearchJob.fulfilled, (state, action) => {
+        state.reviewStatus = "succeeded"
+        state.job = action.payload
+        state.sourcesStatus = "idle"
+        state.evidenceStatus = "idle"
+        state.reportStatus = "idle"
+        state.verificationStatus = "idle"
+      })
+      .addCase(reviewCurrentResearchJob.rejected, (state, action) => {
+        state.reviewStatus = "failed"
+        state.error = action.error.message ?? "Unable to start review"
       })
   },
 })

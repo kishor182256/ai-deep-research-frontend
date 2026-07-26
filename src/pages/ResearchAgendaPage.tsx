@@ -15,6 +15,7 @@ import {
   requestResearchSuggestions,
   requestResearchSources,
   requestResearchVerification,
+  reviewCurrentResearchJob,
   startResearchJobFromSuggestion,
   suggestionSelected,
 } from "../features/research/researchSlice"
@@ -31,6 +32,7 @@ export default function ResearchAgendaPage() {
     jobStatus,
     report,
     reportStatus,
+    reviewStatus,
     selectedSuggestion,
     sources,
     sourcesStatus,
@@ -41,7 +43,7 @@ export default function ResearchAgendaPage() {
     verificationStatus,
   } = useAppSelector((state) => state.research)
 
-  useResearchJobStream(job?.id)
+  useResearchJobStream(job?.id, job?.status)
 
   const isSuggestionsLoading = suggestionsStatus === "loading"
   const isJobLoading = jobStatus === "loading"
@@ -49,6 +51,7 @@ export default function ResearchAgendaPage() {
     () => new Set(events.map((event) => event.type)),
     [events],
   )
+  const latestEventType = events.at(-1)?.type
 
   useEffect(() => {
     if (!job?.id) {
@@ -60,7 +63,7 @@ export default function ResearchAgendaPage() {
     }
 
     if (
-      eventTypes.has("sources_discovered") &&
+      (latestEventType === "sources_discovered" || latestEventType === "review_sources_discovered") &&
       sourcesStatus === "idle"
     ) {
       void dispatch(refreshResearchJob(job.id))
@@ -68,7 +71,7 @@ export default function ResearchAgendaPage() {
     }
 
     if (
-      eventTypes.has("evidence_extracted") &&
+      (latestEventType === "evidence_extracted" || latestEventType === "review_evidence_extracted") &&
       evidenceStatus === "idle"
     ) {
       void dispatch(refreshResearchJob(job.id))
@@ -76,7 +79,7 @@ export default function ResearchAgendaPage() {
     }
 
     if (
-      eventTypes.has("report_generated") &&
+      latestEventType === "report_generated" &&
       reportStatus === "idle"
     ) {
       void dispatch(refreshResearchJob(job.id))
@@ -84,7 +87,7 @@ export default function ResearchAgendaPage() {
     }
 
     if (
-      eventTypes.has("verification_completed") &&
+      latestEventType === "verification_completed" &&
       verificationStatus === "idle"
     ) {
       void dispatch(refreshResearchJob(job.id))
@@ -94,7 +97,28 @@ export default function ResearchAgendaPage() {
 
     if (
       job.status === "completed" &&
-      report &&
+      sourcesStatus === "idle"
+    ) {
+      void dispatch(requestResearchSources(job.id))
+    }
+
+    if (
+      job.status === "completed" &&
+      evidenceStatus === "idle"
+    ) {
+      void dispatch(requestResearchEvidence(job.id))
+    }
+
+    if (
+      job.status === "completed" &&
+      reportStatus === "idle"
+    ) {
+      void dispatch(requestResearchReport(job.id))
+    }
+
+    if (
+      job.status === "completed" &&
+      (report || reportStatus === "succeeded") &&
       !verification &&
       verificationStatus === "idle"
     ) {
@@ -107,6 +131,7 @@ export default function ResearchAgendaPage() {
     events.length,
     job?.id,
     job?.status,
+    latestEventType,
     report,
     reportStatus,
     sourcesStatus,
@@ -117,17 +142,23 @@ export default function ResearchAgendaPage() {
   const sourcesVisible =
     Boolean(job) &&
     (eventTypes.has("source_discovery_started") ||
+      eventTypes.has("review_started") ||
       eventTypes.has("sources_discovered") ||
+      eventTypes.has("review_sources_discovered") ||
       sources.length > 0)
   const evidenceVisible =
     Boolean(job) &&
     (eventTypes.has("extraction_started") ||
+      eventTypes.has("review_extraction_started") ||
       eventTypes.has("evidence_extracted") ||
+      eventTypes.has("review_evidence_extracted") ||
       evidence.length > 0)
   const reportVisible =
     Boolean(job) &&
     (eventTypes.has("report_generation_started") ||
+      eventTypes.has("review_report_generation_started") ||
       eventTypes.has("report_generated") ||
+      eventTypes.has("review_completed") ||
       eventTypes.has("verification_started") ||
       eventTypes.has("verification_completed") ||
       Boolean(report))
@@ -186,14 +217,22 @@ export default function ResearchAgendaPage() {
       />
 
       <SourcesPanel
-        loading={eventTypes.has("source_discovery_started") && sourcesStatus !== "succeeded"}
+        loading={
+          (eventTypes.has("source_discovery_started") ||
+            eventTypes.has("review_started")) &&
+          sourcesStatus !== "succeeded"
+        }
         sources={sources}
         visible={sourcesVisible}
       />
 
       <EvidencePanel
         evidence={evidence}
-        loading={eventTypes.has("extraction_started") && evidenceStatus !== "succeeded"}
+        loading={
+          (eventTypes.has("extraction_started") ||
+            eventTypes.has("review_extraction_started")) &&
+          evidenceStatus !== "succeeded"
+        }
         visible={evidenceVisible}
       />
 
@@ -210,7 +249,13 @@ export default function ResearchAgendaPage() {
               .catch(() => undefined)
           }
         }}
+        onReview={() => {
+          if (job?.id) {
+            void dispatch(reviewCurrentResearchJob(job.id))
+          }
+        }}
         report={report}
+        reviewLoading={reviewStatus === "loading" || Boolean(job?.current_step?.startsWith("review"))}
         verification={verification}
         verificationLoading={
           verificationStatus === "loading" ||
