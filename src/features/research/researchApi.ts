@@ -1,8 +1,12 @@
 import { httpClient } from "../../shared/api/httpClient"
 import type {
+  ContentGenerationRequest,
+  ContentPackage,
   CreateResearchJobFromSuggestionRequest,
+  ResearchCostSummary,
   ResearchEvidenceChunk,
   ResearchJob,
+  ResearchMemoryMatch,
   ResearchReport,
   ResearchSource,
   ResearchSuggestionRequest,
@@ -17,6 +21,13 @@ export async function fetchResearchSuggestions(
     "/research/suggestions",
     payload,
   )
+  return response.data
+}
+
+export async function fetchResearchMemory(query: string) {
+  const response = await httpClient.get<ResearchMemoryMatch[]>("/research/memory", {
+    params: { query },
+  })
   return response.data
 }
 
@@ -63,6 +74,13 @@ export async function fetchResearchVerification(jobId: string) {
   return response.data
 }
 
+export async function fetchResearchCosts(jobId: string) {
+  const response = await httpClient.get<ResearchCostSummary>(
+    `/research/jobs/${jobId}/costs`,
+  )
+  return response.data
+}
+
 export async function regenerateResearchReport(jobId: string) {
   const response = await httpClient.post<ResearchReport>(
     `/research/jobs/${jobId}/report/regenerate`,
@@ -74,5 +92,17 @@ export async function reviewResearchJob(jobId: string) {
   const response = await httpClient.post<ResearchJob>(
     `/research/jobs/${jobId}/review`,
   )
+  return response.data
+}
+
+export async function retryResearchJob(jobId: string) {
+  const response = await httpClient.post<ResearchJob>(
+    `/research/jobs/${jobId}/retry`,
+  )
+  return response.data
+}
+
+export async function generateContentPackage(payload: ContentGenerationRequest) {
+  const response = await httpClient.post<ContentPackage>("/content/generate", payload)
   return response.data
 }

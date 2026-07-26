@@ -1,20 +1,28 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit"
 import {
   createResearchJobFromSuggestion,
+  fetchResearchCosts,
+  fetchResearchMemory,
   fetchResearchEvidence,
   fetchResearchJob,
   fetchResearchReport,
   fetchResearchSources,
   fetchResearchSuggestions,
   fetchResearchVerification,
+  generateContentPackage,
   regenerateResearchReport,
   reviewResearchJob,
+  retryResearchJob,
 } from "./researchApi"
 import type {
+  ContentGenerationRequest,
+  ContentPackage,
   CreateResearchJobFromSuggestionRequest,
+  ResearchCostSummary,
   ResearchEvidenceChunk,
   ResearchJob,
   ResearchJobEvent,
+  ResearchMemoryMatch,
   ResearchReport,
   ResearchSource,
   ResearchSuggestion,
@@ -27,7 +35,11 @@ type RequestStatus = "idle" | "loading" | "succeeded" | "failed"
 type ResearchState = {
   topic: string
   suggestionBatchId: string | null
+  suggestionCacheHit: boolean
+  suggestionCacheAgeSeconds: number | null
   suggestions: ResearchSuggestion[]
+  memoryMatches: ResearchMemoryMatch[]
+  memoryStatus: RequestStatus
   selectedSuggestion: ResearchSuggestion | null
   suggestionsStatus: RequestStatus
   jobStatus: RequestStatus
@@ -41,14 +53,23 @@ type ResearchState = {
   reportStatus: RequestStatus
   verification: ResearchVerification | null
   verificationStatus: RequestStatus
+  costSummary: ResearchCostSummary | null
+  costStatus: RequestStatus
+  contentPackage: ContentPackage | null
+  contentStatus: RequestStatus
   reviewStatus: RequestStatus
+  retryStatus: RequestStatus
   error: string | null
 }
 
 const initialState: ResearchState = {
   topic: "",
   suggestionBatchId: null,
+  suggestionCacheHit: false,
+  suggestionCacheAgeSeconds: null,
   suggestions: [],
+  memoryMatches: [],
+  memoryStatus: "idle",
   selectedSuggestion: null,
   suggestionsStatus: "idle",
   jobStatus: "idle",
@@ -62,13 +83,23 @@ const initialState: ResearchState = {
   reportStatus: "idle",
   verification: null,
   verificationStatus: "idle",
+  costSummary: null,
+  costStatus: "idle",
+  contentPackage: null,
+  contentStatus: "idle",
   reviewStatus: "idle",
+  retryStatus: "idle",
   error: null,
 }
 
 export const requestResearchSuggestions = createAsyncThunk(
   "research/requestSuggestions",
   async (payload: ResearchSuggestionRequest) => fetchResearchSuggestions(payload),
+)
+
+export const requestResearchMemory = createAsyncThunk(
+  "research/requestMemory",
+  async (query: string) => fetchResearchMemory(query),
 )
 
 export const startResearchJobFromSuggestion = createAsyncThunk(
@@ -102,6 +133,16 @@ export const requestResearchVerification = createAsyncThunk(
   async (jobId: string) => fetchResearchVerification(jobId),
 )
 
+export const requestResearchCosts = createAsyncThunk(
+  "research/requestCosts",
+  async (jobId: string) => fetchResearchCosts(jobId),
+)
+
+export const generateCreatorContent = createAsyncThunk(
+  "research/generateCreatorContent",
+  async (payload: ContentGenerationRequest) => generateContentPackage(payload),
+)
+
 export const regenerateCurrentReport = createAsyncThunk(
   "research/regenerateReport",
   async (jobId: string) => regenerateResearchReport(jobId),
@@ -110,6 +151,26 @@ export const regenerateCurrentReport = createAsyncThunk(
 export const reviewCurrentResearchJob = createAsyncThunk(
   "research/reviewJob",
   async (jobId: string) => reviewResearchJob(jobId),
+)
+
+export const retryCurrentResearchJob = createAsyncThunk(
+  "research/retryJob",
+  async (jobId: string) => retryResearchJob(jobId),
+)
+
+export const openResearchMemoryJob = createAsyncThunk(
+  "research/openMemoryJob",
+  async (jobId: string) => {
+    const [job, sources, evidence, report, verification, costSummary] = await Promise.all([
+      fetchResearchJob(jobId),
+      fetchResearchSources(jobId),
+      fetchResearchEvidence(jobId),
+      fetchResearchReport(jobId),
+      fetchResearchVerification(jobId),
+      fetchResearchCosts(jobId),
+    ])
+    return { costSummary, evidence, job, report, sources, verification }
+  },
 )
 
 const researchSlice = createSlice({
@@ -140,6 +201,10 @@ const researchSlice = createSlice({
       .addCase(requestResearchSuggestions.pending, (state, action) => {
         state.topic = action.meta.arg.topic
         state.suggestionsStatus = "loading"
+        state.suggestionCacheHit = false
+        state.suggestionCacheAgeSeconds = null
+        state.memoryMatches = []
+        state.memoryStatus = "idle"
         state.error = null
         state.selectedSuggestion = null
         state.job = null
@@ -152,16 +217,33 @@ const researchSlice = createSlice({
         state.reportStatus = "idle"
         state.verification = null
         state.verificationStatus = "idle"
+        state.costSummary = null
+        state.costStatus = "idle"
+        state.contentPackage = null
+        state.contentStatus = "idle"
         state.reviewStatus = "idle"
+        state.retryStatus = "idle"
       })
       .addCase(requestResearchSuggestions.fulfilled, (state, action) => {
         state.suggestionsStatus = "succeeded"
         state.suggestionBatchId = action.payload.suggestion_batch_id
+        state.suggestionCacheHit = action.payload.cache_hit
+        state.suggestionCacheAgeSeconds = action.payload.cache_age_seconds
         state.suggestions = action.payload.suggestions
       })
       .addCase(requestResearchSuggestions.rejected, (state, action) => {
         state.suggestionsStatus = "failed"
         state.error = action.error.message ?? "Unable to fetch suggestions"
+      })
+      .addCase(requestResearchMemory.pending, (state) => {
+        state.memoryStatus = "loading"
+      })
+      .addCase(requestResearchMemory.fulfilled, (state, action) => {
+        state.memoryStatus = "succeeded"
+        state.memoryMatches = action.payload
+      })
+      .addCase(requestResearchMemory.rejected, (state) => {
+        state.memoryStatus = "failed"
       })
       .addCase(startResearchJobFromSuggestion.pending, (state) => {
         state.jobStatus = "loading"
@@ -179,7 +261,12 @@ const researchSlice = createSlice({
         state.reportStatus = "idle"
         state.verification = null
         state.verificationStatus = "idle"
+        state.costSummary = null
+        state.costStatus = "idle"
+        state.contentPackage = null
+        state.contentStatus = "idle"
         state.reviewStatus = "idle"
+        state.retryStatus = "idle"
       })
       .addCase(startResearchJobFromSuggestion.rejected, (state, action) => {
         state.jobStatus = "failed"
@@ -232,9 +319,35 @@ const researchSlice = createSlice({
         state.verificationStatus = "failed"
         state.error = action.error.message ?? "Unable to load verification"
       })
+      .addCase(requestResearchCosts.pending, (state) => {
+        state.costStatus = "loading"
+      })
+      .addCase(requestResearchCosts.fulfilled, (state, action) => {
+        state.costStatus = "succeeded"
+        state.costSummary = action.payload
+      })
+      .addCase(requestResearchCosts.rejected, (state, action) => {
+        state.costStatus = "failed"
+        state.error = action.error.message ?? "Unable to load research metrics"
+      })
+      .addCase(generateCreatorContent.pending, (state) => {
+        state.contentStatus = "loading"
+        state.error = null
+      })
+      .addCase(generateCreatorContent.fulfilled, (state, action) => {
+        state.contentStatus = "succeeded"
+        state.contentPackage = action.payload
+      })
+      .addCase(generateCreatorContent.rejected, (state, action) => {
+        state.contentStatus = "failed"
+        state.error = action.error.message ?? "Unable to generate creator content"
+      })
       .addCase(regenerateCurrentReport.pending, (state) => {
         state.reportStatus = "loading"
         state.verificationStatus = "loading"
+        state.costStatus = "idle"
+        state.contentPackage = null
+        state.contentStatus = "idle"
         state.error = null
       })
       .addCase(regenerateCurrentReport.fulfilled, (state, action) => {
@@ -258,10 +371,63 @@ const researchSlice = createSlice({
         state.evidenceStatus = "idle"
         state.reportStatus = "idle"
         state.verificationStatus = "idle"
+        state.costStatus = "idle"
+        state.contentPackage = null
+        state.contentStatus = "idle"
       })
       .addCase(reviewCurrentResearchJob.rejected, (state, action) => {
         state.reviewStatus = "failed"
         state.error = action.error.message ?? "Unable to start review"
+      })
+      .addCase(retryCurrentResearchJob.pending, (state) => {
+        state.retryStatus = "loading"
+        state.error = null
+      })
+      .addCase(retryCurrentResearchJob.fulfilled, (state, action) => {
+        state.retryStatus = "succeeded"
+        state.job = action.payload
+        state.events = []
+        state.sources = []
+        state.sourcesStatus = "idle"
+        state.evidence = []
+        state.evidenceStatus = "idle"
+        state.report = null
+        state.reportStatus = "idle"
+        state.verification = null
+        state.verificationStatus = "idle"
+        state.costSummary = null
+        state.costStatus = "idle"
+        state.contentPackage = null
+        state.contentStatus = "idle"
+      })
+      .addCase(retryCurrentResearchJob.rejected, (state, action) => {
+        state.retryStatus = "failed"
+        state.error = action.error.message ?? "Unable to retry research"
+      })
+      .addCase(openResearchMemoryJob.pending, (state) => {
+        state.jobStatus = "loading"
+        state.error = null
+      })
+      .addCase(openResearchMemoryJob.fulfilled, (state, action) => {
+        state.jobStatus = "succeeded"
+        state.job = action.payload.job
+        state.events = []
+        state.sources = action.payload.sources
+        state.sourcesStatus = "succeeded"
+        state.evidence = action.payload.evidence
+        state.evidenceStatus = "succeeded"
+        state.report = action.payload.report
+        state.reportStatus = "succeeded"
+        state.verification = action.payload.verification
+        state.verificationStatus = "succeeded"
+        state.costSummary = action.payload.costSummary
+        state.costStatus = "succeeded"
+        state.contentPackage = null
+        state.contentStatus = "idle"
+      })
+      .addCase(openResearchMemoryJob.rejected, (state, action) => {
+        state.jobStatus = "failed"
+        state.error = action.error.message ?? "Unable to open previous research"
       })
   },
 })

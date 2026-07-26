@@ -1,39 +1,58 @@
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAppDispatch, useAppSelector } from "../app/hooks"
 import { AgendaComposer } from "../features/research/components/AgendaComposer"
+import { ContentStudioPanel } from "../features/research/components/ContentStudioPanel"
 import { EvidencePanel } from "../features/research/components/EvidencePanel"
 import { ReportPanel } from "../features/research/components/ReportPanel"
+import { ResearchMemoryPanel } from "../features/research/components/ResearchMemoryPanel"
+import { ResearchMetricsPanel } from "../features/research/components/ResearchMetricsPanel"
 import { ResearchJobPanel } from "../features/research/components/ResearchJobPanel"
 import { SourcesPanel } from "../features/research/components/SourcesPanel"
 import { SuggestionsPanel } from "../features/research/components/SuggestionsPanel"
 import { useResearchJobStream } from "../features/research/hooks/useResearchJobStream"
 import {
   regenerateCurrentReport,
+  generateCreatorContent,
+  openResearchMemoryJob,
   refreshResearchJob,
+  requestResearchCosts,
   requestResearchEvidence,
+  requestResearchMemory,
   requestResearchReport,
   requestResearchSuggestions,
   requestResearchSources,
   requestResearchVerification,
   reviewCurrentResearchJob,
+  retryCurrentResearchJob,
   startResearchJobFromSuggestion,
   suggestionSelected,
 } from "../features/research/researchSlice"
-import type { ResearchSuggestion } from "../features/research/types"
+import type { ContentPlatform, ResearchSuggestion } from "../features/research/types"
 
 export default function ResearchAgendaPage() {
   const dispatch = useAppDispatch()
+  const [selectedContentPlatform, setSelectedContentPlatform] =
+    useState<ContentPlatform>("youtube_shorts")
   const {
     error,
+    costSummary,
+    costStatus,
+    contentPackage,
+    contentStatus,
     evidence,
     evidenceStatus,
     events,
     job,
     jobStatus,
+    memoryMatches,
+    memoryStatus,
     report,
     reportStatus,
     reviewStatus,
+    retryStatus,
     selectedSuggestion,
+    suggestionCacheAgeSeconds,
+    suggestionCacheHit,
     sources,
     sourcesStatus,
     suggestions,
@@ -68,6 +87,7 @@ export default function ResearchAgendaPage() {
     ) {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchSources(job.id))
+      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -76,6 +96,7 @@ export default function ResearchAgendaPage() {
     ) {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchEvidence(job.id))
+      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -84,6 +105,7 @@ export default function ResearchAgendaPage() {
     ) {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchReport(job.id))
+      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -93,6 +115,7 @@ export default function ResearchAgendaPage() {
       void dispatch(refreshResearchJob(job.id))
       void dispatch(requestResearchReport(job.id))
       void dispatch(requestResearchVerification(job.id))
+      void dispatch(requestResearchCosts(job.id))
     }
 
     if (
@@ -124,7 +147,15 @@ export default function ResearchAgendaPage() {
     ) {
       void dispatch(requestResearchVerification(job.id))
     }
+
+    if (
+      job.status === "completed" &&
+      costStatus === "idle"
+    ) {
+      void dispatch(requestResearchCosts(job.id))
+    }
   }, [
+    costStatus,
     dispatch,
     evidenceStatus,
     eventTypes,
@@ -162,6 +193,13 @@ export default function ResearchAgendaPage() {
       eventTypes.has("verification_started") ||
       eventTypes.has("verification_completed") ||
       Boolean(report))
+  const metricsVisible =
+    Boolean(job) &&
+    (job?.status !== "queued" ||
+      sources.length > 0 ||
+      evidence.length > 0 ||
+      Boolean(report) ||
+      Boolean(verification))
 
   function handleTopicSubmit(nextTopic: string) {
     void dispatch(
@@ -169,6 +207,7 @@ export default function ResearchAgendaPage() {
         topic: nextTopic,
       }),
     )
+    void dispatch(requestResearchMemory(nextTopic))
   }
 
   function handleSuggestionSelect(suggestion: ResearchSuggestion) {
@@ -203,6 +242,8 @@ export default function ResearchAgendaPage() {
       ) : null}
 
       <SuggestionsPanel
+        cacheAgeSeconds={suggestionCacheAgeSeconds}
+        cacheHit={suggestionCacheHit}
         disabled={isJobLoading}
         onSelect={handleSuggestionSelect}
         selectedSuggestion={selectedSuggestion}
@@ -213,7 +254,33 @@ export default function ResearchAgendaPage() {
         events={events}
         job={job}
         loading={isJobLoading}
+        onRetry={() => {
+          if (job?.id) {
+            void dispatch(retryCurrentResearchJob(job.id))
+          }
+        }}
+        retryLoading={retryStatus === "loading"}
         selectedSuggestion={selectedSuggestion}
+      />
+
+      <ResearchMemoryPanel
+        loading={memoryStatus === "loading"}
+        matches={memoryMatches}
+        onOpen={(jobId) => {
+          void dispatch(openResearchMemoryJob(jobId))
+        }}
+        visible={suggestionsStatus !== "idle"}
+      />
+
+      <ResearchMetricsPanel
+        costSummary={costSummary}
+        evidence={evidence}
+        job={job}
+        loading={costStatus === "loading"}
+        report={report}
+        sources={sources}
+        verification={verification}
+        visible={metricsVisible}
       />
 
       <SourcesPanel
@@ -237,6 +304,7 @@ export default function ResearchAgendaPage() {
       />
 
       <ReportPanel
+        contentLoading={contentStatus === "loading"}
         loading={
           reportStatus === "loading" ||
           (eventTypes.has("report_generation_started") && reportStatus !== "succeeded")
@@ -246,12 +314,25 @@ export default function ResearchAgendaPage() {
             void dispatch(regenerateCurrentReport(job.id))
               .unwrap()
               .then(() => dispatch(requestResearchVerification(job.id)))
+              .then(() => dispatch(requestResearchCosts(job.id)))
               .catch(() => undefined)
+          }
+        }}
+        onGenerateContent={() => {
+          if (report?.id) {
+            void dispatch(
+              generateCreatorContent({
+                platform: selectedContentPlatform,
+                source_report_id: report.id,
+              }),
+            )
           }
         }}
         onReview={() => {
           if (job?.id) {
             void dispatch(reviewCurrentResearchJob(job.id))
+              .unwrap()
+              .catch(() => dispatch(refreshResearchJob(job.id)))
           }
         }}
         report={report}
@@ -262,6 +343,24 @@ export default function ResearchAgendaPage() {
           (eventTypes.has("verification_started") && verificationStatus !== "succeeded")
         }
         visible={reportVisible}
+      />
+
+      <ContentStudioPanel
+        contentPackage={contentPackage}
+        loading={contentStatus === "loading"}
+        onGenerate={() => {
+          if (report?.id) {
+            void dispatch(
+              generateCreatorContent({
+                platform: selectedContentPlatform,
+                source_report_id: report.id,
+              }),
+            )
+          }
+        }}
+        onPlatformChange={setSelectedContentPlatform}
+        selectedPlatform={selectedContentPlatform}
+        visible={Boolean(report)}
       />
     </main>
   )

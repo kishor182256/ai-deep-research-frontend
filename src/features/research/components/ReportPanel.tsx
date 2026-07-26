@@ -1,9 +1,11 @@
-import { AlertTriangle, CheckCircle2, Clipboard, Download, RefreshCw, ShieldCheck } from "lucide-react"
+import { AlertTriangle, CheckCircle2, Clipboard, Download, RefreshCw, ShieldCheck, Video } from "lucide-react"
 import { useState } from "react"
 import type { ResearchReport, ResearchVerification } from "../types"
 
 type ReportPanelProps = {
   loading: boolean
+  contentLoading: boolean
+  onGenerateContent: () => void
   onRegenerate: () => void
   onReview: () => void
   report: ResearchReport | null
@@ -14,7 +16,9 @@ type ReportPanelProps = {
 }
 
 export function ReportPanel({
+  contentLoading,
   loading,
+  onGenerateContent,
   onRegenerate,
   onReview,
   report,
@@ -92,6 +96,10 @@ export function ReportPanel({
               <button type="button" onClick={handleDownload}>
                 <Download size={16} />
                 <span>Markdown</span>
+              </button>
+              <button disabled={contentLoading} type="button" onClick={onGenerateContent}>
+                <Video className={contentLoading ? "spin" : undefined} size={16} />
+                <span>{contentLoading ? "Generating" : "Generate content"}</span>
               </button>
               <button disabled={loading} type="button" onClick={onRegenerate}>
                 <RefreshCw className={loading ? "spin" : undefined} size={16} />
